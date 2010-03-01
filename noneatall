@@ -1,0 +1,104 @@
+from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+import os, re
+import simplejson as json
+import cgi
+
+style = 'style="font-family:monospace;font-size:10px"'
+
+def threadlist(s, d):
+    s.wfile.write('<table %s>\n' % style)
+    for l in d.splitlines():
+        m = re.match('thread:([0-9A-Fa-f]*) (.*) (\[[0-9/]*\]) ([^;]*); (.*) \(([^()]*)\)$', l)
+        if m:
+            tid = m.group(1)
+            date = m.group(2)
+            count = m.group(3)
+            authors = m.group(4)
+            subject = m.group(5)
+            tags = m.group(6)
+            
+            s.wfile.write('<tr><td>%s</td><td>%s</td><td>%s</td><td><a href="/thread:%s">%s</a></td><td>(%s)</td></tr>\n' % (date, count, authors[:59], tid, subject[:79], ' '.join(map(lambda s: '<a href="/tag:%s">%s</a>' % (s, s), tags.split()))))
+        else:
+            s.wfile.write('failed to parse: %s' % l)
+    s.wfile.write('</table>\n')
+
+def messagelist(s, d):
+    def output_body(s, body):
+        for part in body:
+            if part['content-type'].lower() == 'text/plain':
+                s.wfile.write('<pre><code>\n')
+                s.wfile.write(cgi.escape(part['content']))
+                s.wfile.write('</code></pre>\n')
+            else:
+                s.wfile.write('<em>Part of type %s.</em></br>' % part['content-type'])
+
+    def output_head(s, head, depth):
+        bg = 255-(depth*8)
+        s.wfile.write('<div style="padding-left:10px; background: #%0x%0x%0x;">' % (bg, bg, bg))
+        s.wfile.write('From: %s<br>\n' % (cgi.escape(head['headers']['From'])))
+        s.wfile.write('Subject: %s<br>\n' % (cgi.escape(head['headers']['Subject'])))
+        s.wfile.write('To: %s<br>\n' % (cgi.escape(head['headers']['To'])))
+        s.wfile.write('Cc: %s<br>\n' % (cgi.escape(head['headers']['From'])))
+        output_body(s, head['body'])
+
+    def output_tail(s):
+        s.wfile.write('</div>\n')
+
+    def output_tree(s, tree, depth):
+        (head, tail) = tree
+        output_head(s, head, depth)
+        output_thread(s, tail, depth + 1)
+        output_tail(s)
+
+    def output_thread(s, thread, depth):
+        for tree in thread:
+            output_tree(s, tree, depth)
+
+    def output_forest(s, forest):
+        for thread in forest:
+            output_thread(s, thread, 0)
+
+    s.wfile.write('<div %s>\n' % style)
+
+    forest = json.loads(d)
+    output_forest(s, forest)
+
+    s.wfile.write('</div>\n')
+
+class NoneAtAllHandler(BaseHTTPRequestHandler):
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+
+        command = None
+
+        args = self.path.split(':')
+        if args[0] == '/tag':
+            command = 'search tag:' + args[1]
+            processor = threadlist
+        elif args[0] == '/thread':
+            command = 'show --format=json thread:' + args[1]
+            processor = messagelist
+
+        if not command:
+            command = 'search tag:inbox'
+            processor = threadlist
+
+        p = os.popen('notmuch ' + command)
+        processor(self, p.read())
+        p.close()
+
+        return
+
+def main():
+    try:
+        server = HTTPServer(('', 10237), NoneAtAllHandler)
+        print 'Off and running...'
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print 'Bye!'
+
+if __name__ == '__main__':
+    main()
