@@ -1,12 +1,13 @@
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+from wsgiref.simple_server import make_server
 import os, re
 import simplejson as json
 import cgi
 
 style = 'style="font-family:monospace;font-size:10px"'
 
-def threadlist(s, d):
-    s.wfile.write('<table %s>\n' % style)
+def threadlist(environ, start_response, d):
+    res = []
+    res.append('<table %s>\n' % style)
     for l in d.splitlines():
         m = re.match('thread:([0-9A-Fa-f]*) (.*) (\[[0-9/]*\]) ([^;]*); (.*) \(([^()]*)\)$', l)
         if m:
@@ -16,85 +17,85 @@ def threadlist(s, d):
             authors = m.group(4)
             subject = m.group(5)
             tags = m.group(6)
-            
-            s.wfile.write('<tr><td>%s</td><td>%s</td><td>%s</td><td><a href="/thread:%s">%s</a></td><td>(%s)</td></tr>\n' % (date, count, authors[:59], tid, subject[:79], ' '.join(map(lambda s: '<a href="/tag:%s">%s</a>' % (s, s), tags.split()))))
-        else:
-            s.wfile.write('failed to parse: %s' % l)
-    s.wfile.write('</table>\n')
 
-def messagelist(s, d):
-    def output_body(s, body):
+            res.append('<tr><td>%s</td><td>%s</td><td>%s</td><td><a href="/thread:%s">%s</a></td><td>(%s)</td></tr>\n' % (date, count, authors[:59], tid, subject[:79], ' '.join(map(lambda s: '<a href="/tag:%s">%s</a>' % (s, s), tags.split()))))
+        else:
+            res.append('failed to parse: %s' % l)
+
+    start_response("200 OK", [('content-type', 'text/html')])
+    res.append('</table>\n')
+    return res;
+
+def messagelist(environ, start_response, d):
+    res = []
+    def output_body(body):
         for part in body:
             if part['content-type'].lower() == 'text/plain':
-                s.wfile.write('<pre><code>\n')
-                s.wfile.write(cgi.escape(part['content']))
-                s.wfile.write('</code></pre>\n')
+                res.append('<pre><code>\n')
+                res.append(cgi.escape(part['content']))
+                res.append('</code></pre>\n')
             else:
-                s.wfile.write('<em>Part of type %s.</em></br>' % part['content-type'])
+                res.append('<em>Part of type %s.</em></br>' % part['content-type'])
 
-    def output_head(s, head, depth):
+    def output_head(head, depth):
         bg = 255-(depth*8)
-        s.wfile.write('<div style="padding-left:10px; background: #%0x%0x%0x;">' % (bg, bg, bg))
-        s.wfile.write('From: %s<br>\n' % (cgi.escape(head['headers']['From'])))
-        s.wfile.write('Subject: %s<br>\n' % (cgi.escape(head['headers']['Subject'])))
-        s.wfile.write('To: %s<br>\n' % (cgi.escape(head['headers']['To'])))
-        s.wfile.write('Cc: %s<br>\n' % (cgi.escape(head['headers']['From'])))
-        output_body(s, head['body'])
+        res.append('<div style="padding-left:10px; background: #%0x%0x%0x;">' % (bg, bg, bg))
+        res.append('From: %s<br>\n' % (cgi.escape(head['headers']['From'])))
+        res.append('Subject: %s<br>\n' % (cgi.escape(head['headers']['Subject'])))
+        res.append('To: %s<br>\n' % (cgi.escape(head['headers']['To'])))
+        res.append('Cc: %s<br>\n' % (cgi.escape(head['headers']['From'])))
+        output_body(head['body'])
 
-    def output_tail(s):
-        s.wfile.write('</div>\n')
+    def output_tail():
+        res.append('</div>\n')
 
-    def output_tree(s, tree, depth):
+    def output_tree(tree, depth):
         (head, tail) = tree
-        output_head(s, head, depth)
-        output_thread(s, tail, depth + 1)
-        output_tail(s)
+        output_head(head, depth)
+        output_thread(tail, depth + 1)
+        output_tail()
 
-    def output_thread(s, thread, depth):
+    def output_thread(thread, depth):
         for tree in thread:
-            output_tree(s, tree, depth)
+            output_tree(tree, depth)
 
-    def output_forest(s, forest):
+    def output_forest(forest):
         for thread in forest:
-            output_thread(s, thread, 0)
+            output_thread(thread, 0)
 
-    s.wfile.write('<div %s>\n' % style)
+    res.append('<div %s>\n' % style)
 
     forest = json.loads(d)
-    output_forest(s, forest)
+    output_forest(forest)
 
-    s.wfile.write('</div>\n')
+    res.append('</div>\n')
 
-class NoneAtAllHandler(BaseHTTPRequestHandler):
+    start_response('200 OK', [('content-type', 'text/html')]);
+    return res
 
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
+def application(environ, start_response):
+    command = None
 
-        command = None
+    args = environ['PATH_INFO'].split(':')
+    if args[0] == '/tag':
+        command = 'search tag:' + args[1]
+        processor = threadlist
+    elif args[0] == '/thread':
+        command = 'show --format=json thread:' + args[1]
+        processor = messagelist
 
-        args = self.path.split(':')
-        if args[0] == '/tag':
-            command = 'search tag:' + args[1]
-            processor = threadlist
-        elif args[0] == '/thread':
-            command = 'show --format=json thread:' + args[1]
-            processor = messagelist
+    if not command:
+        command = 'search tag:inbox'
+        processor = threadlist
 
-        if not command:
-            command = 'search tag:inbox'
-            processor = threadlist
-
-        p = os.popen('notmuch ' + command)
-        processor(self, p.read())
-        p.close()
-
-        return
+    p = os.popen('notmuch ' + command)
+    res = processor(environ, start_response, p.read())
+    p.close()
+    return res
 
 def main():
     try:
-        server = HTTPServer(('', 10237), NoneAtAllHandler)
+        server = make_server('0.0.0.0', 10237, application);
         print 'Off and running...'
         server.serve_forever()
     except KeyboardInterrupt:
