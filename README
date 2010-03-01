@@ -1,0 +1,14 @@
+Whilst thinking about web interfaces for notmuch I decided that it would
+be quicker to implement one and play rather than trying to consider all
+possibilities. The result is noneatall.
+
+It's _very_ simple and pretty nasty. Please look at the source before
+you use it - there are no doubt a variety of security holes.
+
+Feel free to use, enhance, etc. It would be good if improvements were
+made available to all.
+
+Teaser pictures:
+
+- a list of messages (tag:notmuch in this case):  http://dme.org/notmuch/index-20100301.png
+- a displayed forest: http://dme.org/notmuch/thread-20100301.png
