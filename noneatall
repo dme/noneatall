@@ -114,13 +114,13 @@ def application(environ, start_response):
         processor = messagelist
 
     if not command:
-        command = 'search tag:inbox'
-        processor = threadlist
-
-    p = os.popen('notmuch ' + command)
-    res = processor(environ, start_response, p.read())
-    p.close()
-    return res
+        start_response('302 Found', [('location', '/search/tag:inbox')])
+        return ''
+    else:
+        p = os.popen('notmuch ' + command)
+        res = processor(environ, start_response, p.read())
+        p.close()
+        return res
 
 def main():
     try:
