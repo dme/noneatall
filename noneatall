@@ -1,13 +1,16 @@
+#!/usr/bin/env python
+
 from wsgiref.simple_server import make_server
 import os, re
 import simplejson as json
 import cgi
 
-style = 'style="font-family:monospace;font-size:10px"'
+style_normal = 'style="font-family:serif;"'
+style_fixed = 'style="font-family:monospace;"'
 
 def threadlist(environ, start_response, d):
     res = []
-    res.append('<table %s>\n' % style)
+    res.append('<table %s>\n' % style_normal)
     for l in d.splitlines():
         m = re.match('thread:([0-9A-Fa-f]*) (.*) (\[[0-9/]*\]) ([^;]*); (.*) \(([^()]*)\)$', l)
         if m:
@@ -28,12 +31,38 @@ def threadlist(environ, start_response, d):
 
 def messagelist(environ, start_response, d):
     res = []
+
+    def wash(text):
+
+        def wash_wrap(text):
+            import textwrap
+
+            r = ""
+            for line in text.split('\n'):
+                if len(line) > 80:
+                    m = re.match('([> ]+)', line)
+                    if m:
+                        prefix = m.group(1)
+                    else:
+                        prefix = ''
+                    r += textwrap.fill(line, subsequent_indent = prefix)
+                else:
+                    r += line
+                r += '\n'
+            return r
+
+        def wash_compress_blank(text):
+            regexp = re.compile('[\n]+', re.MULTILINE)
+            return regexp.sub('\n', text)
+            
+        return wash_wrap(text)
+
     def output_body(body):
         for part in body:
             if part['content-type'].lower() == 'text/plain':
-                res.append('<pre><code>\n')
-                res.append(cgi.escape(part['content']))
-                res.append('</code></pre>\n')
+                res.append('<pre %s>\n' % style_fixed)
+                res.append(cgi.escape(wash(part['content'])))
+                res.append('</pre>\n')
             else:
                 res.append('<em>Part of type %s.</em></br>' % part['content-type'])
 
@@ -63,7 +92,7 @@ def messagelist(environ, start_response, d):
         for thread in forest:
             output_thread(thread, 0)
 
-    res.append('<div %s>\n' % style)
+    res.append('<div %s>\n' % style_normal)
 
     forest = json.loads(d)
     output_forest(forest)
