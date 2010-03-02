@@ -51,7 +51,7 @@ def threadlist(environ, start_response, d):
             subject = m.group(5)
             tags = m.group(6)
 
-            res.append('<tr><td>%s</td><td>%s</td><td>%s</td><td><a href="/show/thread:%s">%s</a></td><td>(%s)</td></tr>\n' % (date, count, authors[:59], tid, subject[:79], ' '.join(map(lambda s: '<a href="/tag:%s">%s</a>' % (s, s), tags.split()))))
+            res.append('<tr><td>%s</td><td>%s</td><td>%s</td><td><a href="/show/thread:%s">%s</a></td><td>(%s)</td></tr>\n' % (date, count, authors[:59], tid, subject[:79], ' '.join(map(lambda s: '<a href="/search/tag:%s">%s</a>' % (s, s), tags.split()))))
         else:
             res.append('failed to parse: %s' % l)
 
