@@ -21,7 +21,7 @@ def threadlist(environ, start_response, d):
             subject = m.group(5)
             tags = m.group(6)
 
-            res.append('<tr><td>%s</td><td>%s</td><td>%s</td><td><a href="/thread:%s">%s</a></td><td>(%s)</td></tr>\n' % (date, count, authors[:59], tid, subject[:79], ' '.join(map(lambda s: '<a href="/tag:%s">%s</a>' % (s, s), tags.split()))))
+            res.append('<tr><td>%s</td><td>%s</td><td>%s</td><td><a href="/show/thread:%s">%s</a></td><td>(%s)</td></tr>\n' % (date, count, authors[:59], tid, subject[:79], ' '.join(map(lambda s: '<a href="/tag:%s">%s</a>' % (s, s), tags.split()))))
         else:
             res.append('failed to parse: %s' % l)
 
@@ -105,12 +105,12 @@ def messagelist(environ, start_response, d):
 def application(environ, start_response):
     command = None
 
-    args = environ['PATH_INFO'].split(':')
-    if args[0] == '/tag':
-        command = 'search tag:' + args[1]
+    args = environ['PATH_INFO'].split('/')
+    if args[1] == 'search':
+        command = 'search ' + '/'.join(args[2:])
         processor = threadlist
-    elif args[0] == '/thread':
-        command = 'show --format=json thread:' + args[1]
+    elif args[1] == 'show':
+        command = 'show --format=json ' + '/'.join(args[2:])
         processor = messagelist
 
     if not command:
