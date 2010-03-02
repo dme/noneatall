@@ -1,14 +1,45 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# noneatall - A poor web interface for notmuch.
+#
+# Copyright © 2010 David Edmondson
+# Copyright © 2010 Alexander Botero-Lowry
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see http://www.gnu.org/licenses/ .
+#
+# Authors: David Edmondson <dme@dme.org>
+#          Alexander Botero-Lowry <alexbl@alexbl.net>
+#
 
 from wsgiref.simple_server import make_server
 import os, re
 import simplejson as json
 import cgi
 
+style_all = """
+<style type="text/css">
+a {
+	text-decoration: none;
+}
+</style>
+"""
 style_fixed = 'style="font-family: serif;"'
 
 def threadlist(environ, start_response, d):
     res = []
+    res.append(style_all)
     res.append('<table>\n')
     for l in d.splitlines():
         m = re.match('thread:([0-9A-Fa-f]*) (.*) (\[[0-9/]*\]) ([^;]*); (.*) \(([^()]*)\)$', l)
@@ -81,13 +112,20 @@ def messagelist(environ, start_response, d):
     def output_head(head, depth):
         bg = 255-(depth*8)
         res.append('<div style="padding-left: 10px; background: #%0x%0x%0x;">\n' % (bg, bg, bg))
+        res.append('<a href="javascript:toggle(\'%s\')">%s: %s</a>\n' %
+                   (head['id'], cgi.escape(head['headers']['From']), cgi.escape(head['headers']['Subject'])))
+        if head['match']:
+            display = 'block'
+        else:
+            display = 'none'
+        res.append('<div id=%s style="display: %s">\n' % (head['id'], display))
         res.append('<table style="background: #%0x%0xf0;">\n' % (bg-20, bg-20))
-        res.append('<tr><td>From:</td><td>%s</td></tr>\n' % (cgi.escape(head['headers']['From'])))
-        res.append('<tr><td>Subject:</td><td>%s</td></tr>\n' % (cgi.escape(head['headers']['Subject'])))
         res.append('<tr><td>To:</td><td>%s</td></tr>\n' % (cgi.escape(head['headers']['To'])))
         res.append('<tr><td>Cc:</td><td>%s</td></tr>\n' % (cgi.escape(head['headers']['From'])))
+        res.append('<tr><td>Date:</td><td>%s</td></tr>\n' % (cgi.escape(head['headers']['Date'])))
         res.append('</table>\n')
         output_body(head['body'], depth)
+        res.append('</div>')
 
     def output_tail():
         res.append('</div>\n')
@@ -107,6 +145,19 @@ def messagelist(environ, start_response, d):
         for thread in forest:
             output_thread(thread, 0)
 
+    res.append(style_all)
+    res.append("""
+<script language="JavaScript">
+function toggle(id) {
+	var e = document.getElementById(id);
+	if (e.style.display == 'block') {
+		e.style.display = 'none';
+	} else {
+		e.style.display = 'block';
+	}
+}
+</script>
+""")
     forest = json.loads(d)
     output_forest(forest)
 
