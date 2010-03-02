@@ -5,12 +5,11 @@ import os, re
 import simplejson as json
 import cgi
 
-style_normal = ''
-style_fixed = 'style="font-family:monospace;"'
+style_fixed = 'style="font-family: serif;"'
 
 def threadlist(environ, start_response, d):
     res = []
-    res.append('<table %s>\n' % style_normal)
+    res.append('<table>\n')
     for l in d.splitlines():
         m = re.match('thread:([0-9A-Fa-f]*) (.*) (\[[0-9/]*\]) ([^;]*); (.*) \(([^()]*)\)$', l)
         if m:
@@ -25,8 +24,8 @@ def threadlist(environ, start_response, d):
         else:
             res.append('failed to parse: %s' % l)
 
-    start_response("200 OK", [('content-type', 'text/html')])
     res.append('</table>\n')
+    start_response("200 OK", [('content-type', 'text/html')])
     return res;
 
 def messagelist(environ, start_response, d):
@@ -57,26 +56,42 @@ def messagelist(environ, start_response, d):
             
         return wash_compress_blank(wash_wrap(text))
 
-    def output_body(body):
+    def output_body(body, depth):
         for part in body:
-            if part['content-type'].lower() == 'text/plain':
+            try:
+                hdr = '<em>Part of type %s:</em><br />\n' % part['content-type']
+                pre = ''
+                post = ''
+                if part['content-type'].lower() == 'text/plain':
+                    hdr = ''
+                else:
+                    bg = 255 - (depth * 8) - 4
+                    pre = '<div style="padding-left: 10px; background: #%0x%0x%0x;">\n' % (bg, bg, bg)
+                    post = '</div>\n'
+                content = cgi.escape(wash(part['content']))
+                res.append(pre)
+                res.append(hdr)
                 res.append('<pre %s>\n' % style_fixed)
-                res.append(cgi.escape(wash(part['content'])))
+                res.append(content)
                 res.append('</pre>\n')
-            else:
-                res.append('<em>Part of type %s.</em></br>' % part['content-type'])
+                res.append(post)
+            except:
+                res.append('<em>Part of type %s (not shown).</em><br />\n' % part['content-type'])
 
     def output_head(head, depth):
         bg = 255-(depth*8)
-        res.append('<div style="padding-left:10px; background: #%0x%0x%0x;">' % (bg, bg, bg))
-        res.append('From: %s<br>\n' % (cgi.escape(head['headers']['From'])))
-        res.append('Subject: %s<br>\n' % (cgi.escape(head['headers']['Subject'])))
-        res.append('To: %s<br>\n' % (cgi.escape(head['headers']['To'])))
-        res.append('Cc: %s<br>\n' % (cgi.escape(head['headers']['From'])))
-        output_body(head['body'])
+        res.append('<div style="padding-left: 10px; background: #%0x%0x%0x;">\n' % (bg, bg, bg))
+        res.append('<table style="background: #%0x%0xf0;">\n' % (bg-20, bg-20))
+        res.append('<tr><td>From:</td><td>%s</td></tr>\n' % (cgi.escape(head['headers']['From'])))
+        res.append('<tr><td>Subject:</td><td>%s</td></tr>\n' % (cgi.escape(head['headers']['Subject'])))
+        res.append('<tr><td>To:</td><td>%s</td></tr>\n' % (cgi.escape(head['headers']['To'])))
+        res.append('<tr><td>Cc:</td><td>%s</td></tr>\n' % (cgi.escape(head['headers']['From'])))
+        res.append('</table>\n')
+        output_body(head['body'], depth)
 
     def output_tail():
         res.append('</div>\n')
+        res.append('<br />\n')
 
     def output_tree(tree, depth):
         (head, tail) = tree
@@ -92,12 +107,8 @@ def messagelist(environ, start_response, d):
         for thread in forest:
             output_thread(thread, 0)
 
-    res.append('<div %s>\n' % style_normal)
-
     forest = json.loads(d)
     output_forest(forest)
-
-    res.append('</div>\n')
 
     start_response('200 OK', [('content-type', 'text/html')]);
     return res
@@ -125,7 +136,6 @@ def application(environ, start_response):
 def main():
     try:
         server = make_server('0.0.0.0', 10237, application);
-        print 'Off and running...'
         server.serve_forever()
     except KeyboardInterrupt:
         print 'Bye!'
