@@ -129,7 +129,6 @@ def messagelist(environ, start_response, d):
 
     def output_tail():
         res.append('</div>\n')
-        res.append('<br />\n')
 
     def output_tree(tree, depth):
         (head, tail) = tree
