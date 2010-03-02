@@ -5,7 +5,7 @@ import os, re
 import simplejson as json
 import cgi
 
-style_normal = 'style="font-family:serif;"'
+style_normal = ''
 style_fixed = 'style="font-family:monospace;"'
 
 def threadlist(environ, start_response, d):
@@ -52,10 +52,10 @@ def messagelist(environ, start_response, d):
             return r
 
         def wash_compress_blank(text):
-            regexp = re.compile('[\n]+', re.MULTILINE)
-            return regexp.sub('\n', text)
+            regexp = re.compile('[\n]{3,}', re.MULTILINE)
+            return regexp.sub('\n\n', text)
             
-        return wash_wrap(text)
+        return wash_compress_blank(wash_wrap(text))
 
     def output_body(body):
         for part in body:
